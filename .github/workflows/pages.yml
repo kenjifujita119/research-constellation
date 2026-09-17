@@ -40,6 +40,9 @@ jobs:
       - run: npm run build
         env:
           PAGES_BASE_PATH: ${{ steps.pages.outputs.base_path }}
+          # Cloudflare Web Analytics for kenjifujita119.github.io. Not a secret: it is in the HTML
+          # of every published page, and can only record visits.
+          CF_BEACON_TOKEN: 91bcdee69db74865968cbf4c7f5f31cd
 
       - uses: actions/upload-pages-artifact@v5
         with:

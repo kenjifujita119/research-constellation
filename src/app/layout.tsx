@@ -27,6 +27,11 @@ export const metadata: Metadata = {
     "Explore your research network from an ORCID iD: how it connects, evolves, and expands — everyone you have written with, where your work has been cited, and who you could connect with next.",
 };
 
+// Cloudflare Web Analytics. Only the published build gets it: the Pages workflow passes the
+// token in, so running the app locally counts nothing. The token is not a secret — it sits in
+// the HTML of every published page — and all it can do is record a visit to this site.
+const BEACON_TOKEN = process.env.CF_BEACON_TOKEN;
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html
@@ -37,6 +42,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body>
         <ThemeScript />
         <TooltipProvider delayDuration={200}>{children}</TooltipProvider>
+        {BEACON_TOKEN && (
+          <script
+            defer
+            src="https://static.cloudflareinsights.com/beacon.min.js"
+            data-cf-beacon={JSON.stringify({ token: BEACON_TOKEN })}
+          />
+        )}
       </body>
     </html>
   );

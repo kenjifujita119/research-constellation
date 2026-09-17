@@ -300,10 +300,23 @@ export default function Home() {
             >
               Natural Earth
             </a>{" "}
-            (public domain).
+            (public domain). Visits are counted with{" "}
+            <a
+              className="underline underline-offset-2 hover:text-foreground"
+              href="https://www.cloudflare.com/web-analytics/"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Cloudflare Web Analytics
+            </a>
+            : no cookies, and it records which page was opened, never who you looked up.
           </p>
+          {/* Checked against what the beacon actually sends (2026-09-17): the page address with the
+              query and fragment cut off, the previous page cut the same way, browser and OS
+              versions, and load timings. The ORCID iD is only ever in the query, so it never goes.
+              Look again before changing this line if the beacon or the routes change. */}
           {/* A plain link, not Ko-fi's button or widget: those load from Ko-fi's servers, and the
-              line above says the page talks to nobody but OpenAlex. */}
+              line above names everyone the page talks to. */}
           <p className="mt-2 max-w-3xl text-[11px] leading-relaxed text-muted-foreground/80">
             <a
               className="inline-flex items-center gap-1 underline underline-offset-2 hover:text-foreground"

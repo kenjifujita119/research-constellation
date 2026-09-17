@@ -2,7 +2,7 @@
   "name": "research-constellation",
   "version": "0.1.0",
   "private": true,
-  "description": "Explore your research network from an ORCID iD: how it connects, evolves, and expands — who you have written with, where your work has travelled, and who you could connect with next. Runs entirely in the browser on OpenAlex data: no account, no server, nothing stored anywhere but your own machine.",
+  "description": "Explore your research network from an ORCID iD: how it connects, evolves, and expands — who you have written with, where your work has travelled, and who you could connect with next. Runs entirely in the browser on OpenAlex data: no account, no server, and what you look up stays on your own machine.",
   "license": "MIT",
   "author": "Kenji Fujita",
   "repository": {
