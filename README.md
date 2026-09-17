@@ -97,7 +97,7 @@ Node.js 24 以上が必要です。コマンドは英語版の [Run it locally](
 
 ### 支援
 
-研究者がひとりで、空いた時間に作っています。役に立ったら、[Ko-fi でチップを送れます](https://ko-fi.com/kenjifujita)。
+平日の夜と休日に1人で作っています。[Ko-fi](https://ko-fi.com/kenjifujita)でチップを頂けると励みになります。
 
 ### クレジットとライセンス
 
