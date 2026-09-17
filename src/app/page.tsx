@@ -1,10 +1,9 @@
 "use client";
 
-import { ArrowRight, Boxes, Globe, Loader2, Search, Users } from "lucide-react";
+import { ArrowRight, Boxes, Coffee, Globe, Loader2, Search, Users } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import HeroGraph from "@/components/HeroGraph";
-import { ThemeToggle } from "@/components/ThemeProvider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -105,9 +104,10 @@ export default function Home() {
       />
 
       <div className="relative flex min-h-svh flex-col">
-        <header className="flex items-center justify-between px-4 py-3 sm:px-6">
+        {/* No theme switch here: this page is always dark (`dark` above), so it changed nothing.
+            The height is the one the switch used to give the header, so nothing below moves. */}
+        <header className="flex h-13 items-center px-4 sm:px-6">
           <span className="text-xs font-semibold tracking-tight">Research Constellation</span>
-          <ThemeToggle />
         </header>
 
         <div className="flex flex-1 items-center px-4 py-8 sm:px-6">
@@ -301,6 +301,19 @@ export default function Home() {
               Natural Earth
             </a>{" "}
             (public domain).
+          </p>
+          {/* A plain link, not Ko-fi's button or widget: those load from Ko-fi's servers, and the
+              line above says the page talks to nobody but OpenAlex. */}
+          <p className="mt-2 max-w-3xl text-[11px] leading-relaxed text-muted-foreground/80">
+            <a
+              className="inline-flex items-center gap-1 underline underline-offset-2 hover:text-foreground"
+              href="https://ko-fi.com/kenjifujita"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <Coffee className="size-3" aria-hidden />
+              Tip on Ko-fi
+            </a>
           </p>
         </footer>
       </div>
