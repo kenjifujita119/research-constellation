@@ -620,9 +620,14 @@ export default function ShapeGraph({
             .nodeOpacity(0.95)
             .nodeVisibility((n) => n.since <= latest.current.upTo)
             .linkVisibility((l) => l.since <= latest.current.upTo)
-            .nodeLabel(
-              (n) =>
-                `<div style="font:12px system-ui;padding:6px 8px;background:rgba(0,0,0,.85);border-radius:4px;color:#fff;max-width:240px"><b>${n.name}</b><br><span style="opacity:.7">${n.papers} ${n.papers === 1 ? "paper" : "papers"} with you · ${n.since === n.until ? n.since : `${n.since}–${n.until}`}</span>${
+            // No hover label where there is no hover. A phone has no cursor, but the library keeps
+            // the last touch as the pointer and tests it against the spheres every frame, so while
+            // the shape turned, each sphere passing under that spot flashed its label. A tap still
+            // opens the same details in the panel (onNodeClick).
+            .nodeLabel((n) =>
+              window.matchMedia("(hover: none)").matches
+                ? ""
+                : `<div style="font:12px system-ui;padding:6px 8px;background:rgba(0,0,0,.85);border-radius:4px;color:#fff;max-width:240px"><b>${n.name}</b><br><span style="opacity:.7">${n.papers} ${n.papers === 1 ? "paper" : "papers"} with you · ${n.since === n.until ? n.since : `${n.since}–${n.until}`}</span>${
                   n.topics.length
                     ? `<br><span style="opacity:.7">${n.topics
                         .slice(0, 3)

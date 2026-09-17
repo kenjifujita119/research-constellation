@@ -89,28 +89,33 @@ export default function Home() {
     // `dark` so every control on the stage takes its dark colours, whichever theme the visitor
     // is in. The canvas is dark on every screen of this app; the front door matches it.
     <main className="dark relative min-h-svh overflow-hidden bg-canvas text-foreground">
-      {/* Wide screens: the shape keeps to the right of the words. Narrow ones have no room
-          beside them, so it takes the lower half instead of hiding behind the text. */}
-      <HeroGraph className="absolute inset-x-0 bottom-[26%] top-[34%] opacity-95 md:inset-y-0 md:bottom-0 md:left-[26%] md:top-0" />
-      {/* The veil comes from wherever the words are: down the page on a phone, across from the
-          left on a wide screen. */}
-      <div
-        className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_bottom,rgba(8,10,16,0.98)_0%,rgba(8,10,16,0.95)_34%,rgba(8,10,16,0.62)_54%,rgba(8,10,16,0.12)_78%,rgba(8,10,16,0)_100%)] md:bg-[linear-gradient(to_right,rgba(8,10,16,0.98)_0%,rgba(8,10,16,0.96)_32%,rgba(8,10,16,0.72)_48%,rgba(8,10,16,0.3)_66%,rgba(8,10,16,0.05)_88%,rgba(8,10,16,0)_100%)]"
-        aria-hidden
-      />
-      <div
-        className="pointer-events-none absolute inset-x-0 bottom-0 h-40 bg-[linear-gradient(to_top,rgba(8,10,16,0.96)_0%,rgba(8,10,16,0.7)_45%,rgba(8,10,16,0)_100%)] md:h-56"
-        aria-hidden
-      />
-
       <div className="relative flex min-h-svh flex-col">
+        {/* Wide screens: the shape sits behind the page, to the right of the words, under a veil
+            that comes across from the left. Phones: there is no room beside the words, and behind
+            them it was covered by the words above and the footer below — about 100px of a 812px
+            screen was left showing. So on a phone it gets its own stretch of the page, between
+            the form and the footer, and the page scrolls. Its top and bottom edges fade into the
+            ground instead of cutting off.
+
+            The shape and the veil are placed in this column, before everything else, so that
+            the header, form and footer (all `relative`) stack above them. */}
+        <HeroGraph className="relative order-3 h-[62svh] w-full opacity-95 [mask-image:linear-gradient(to_bottom,transparent_0%,black_12%,black_88%,transparent_100%)] md:absolute md:inset-y-0 md:left-[26%] md:right-0 md:order-none md:h-auto md:w-auto md:[mask-image:none]" />
+        <div
+          className="pointer-events-none absolute inset-0 hidden bg-[linear-gradient(to_right,rgba(8,10,16,0.98)_0%,rgba(8,10,16,0.96)_32%,rgba(8,10,16,0.72)_48%,rgba(8,10,16,0.3)_66%,rgba(8,10,16,0.05)_88%,rgba(8,10,16,0)_100%)] md:block"
+          aria-hidden
+        />
+        <div
+          className="pointer-events-none absolute inset-x-0 bottom-0 hidden h-56 bg-[linear-gradient(to_top,rgba(8,10,16,0.96)_0%,rgba(8,10,16,0.7)_45%,rgba(8,10,16,0)_100%)] md:block"
+          aria-hidden
+        />
+
         {/* No theme switch here: this page is always dark (`dark` above), so it changed nothing.
             The height is the one the switch used to give the header, so nothing below moves. */}
-        <header className="flex h-13 items-center px-4 sm:px-6">
+        <header className="relative order-1 flex h-13 items-center px-4 sm:px-6 md:order-none">
           <span className="text-xs font-semibold tracking-tight">Research Constellation</span>
         </header>
 
-        <div className="flex flex-1 items-center px-4 py-8 sm:px-6">
+        <div className="relative order-2 flex items-center px-4 pb-2 pt-8 sm:px-6 md:order-none md:flex-1 md:py-8">
           <div className="w-full max-w-lg">
             {/* Balanced, not pretty: this headline runs to three or four lines, and text-pretty
                 only protects the last one. Without balancing, the em dash was left stranded at
@@ -126,14 +131,8 @@ export default function Home() {
 
             {/* Everything you type or press is kept to a narrower column than the words above it.
                 At the full width of the headline the field ran under the network behind the page,
-                and a text box sitting on top of moving spheres reads as a mistake.
-
-                The bottom margin replaces a paragraph that used to sit here. This column is
-                centred vertically, so losing the paragraph made the block shorter and re-centred
-                it lower — far enough that the sample button landed on the spheres. Restoring the
-                height puts everything back where it was. Only on narrow screens: on wide ones the
-                network is off to the right and never met this column. */}
-            <div className="mb-16 max-w-sm md:mb-0">
+                and a text box sitting on top of moving spheres reads as a mistake. */}
+            <div className="max-w-sm">
               <form
                 className="mt-6 space-y-3"
                 onSubmit={(e) => {
@@ -246,10 +245,7 @@ export default function Home() {
           </div>
         </div>
 
-        {/* On a phone the shape runs the width of the page, so the footer gets its own frosted
-            ground to sit on and the spheres pass behind it. A wide screen keeps the shape to the
-            right of the text and needs none of that. */}
-        <footer className="bg-canvas/85 px-4 pb-8 pt-4 backdrop-blur-sm sm:px-6 md:bg-transparent md:pt-0 md:backdrop-blur-none">
+        <footer className="relative order-4 px-4 pb-8 pt-4 sm:px-6 md:order-none md:pt-0">
           <dl className="grid max-w-3xl gap-x-6 gap-y-3 border-t border-border/60 pt-4 sm:grid-cols-3">
             {WHAT.map(({ icon: Icon, title, line }) => (
               <div key={title}>

@@ -79,9 +79,10 @@ function ShapeView({ orcid, onReload }: { orcid: string; onReload: () => void })
   // stays out of date until the list is fetched again.
   const [rebuilding, setRebuilding] = useState(false);
   const [stats, setStats] = useState({ people: 0, clusters: 0 });
-  // On a narrow screen the 3D view cannot be rotated, and a canvas is invisible to screen
-  // readers. Show the same content as a list too; the list is the default.
-  const [narrowView, setNarrowView] = useState<"list" | "shape">("list");
+  // A canvas is invisible to screen readers, so on a narrow screen the same content is offered
+  // as a list too. The shape is the default: it is what the page is for, and people arriving
+  // from the front page expect to see it, not a list of names.
+  const [narrowView, setNarrowView] = useState<"list" | "shape">("shape");
   const [year, setYear] = useState<number | null>(null);
   const [playing, setPlaying] = useState(false);
   const [colorBy, setColorBy] = useState<ShapeColor>("topic");
@@ -418,8 +419,8 @@ function ShapeView({ orcid, onReload }: { orcid: string; onReload: () => void })
       <nav className="flex shrink-0 border-t bg-card md:hidden">
         {(
           [
-            ["list", "People", ListOrdered],
             ["shape", "Shape", Boxes],
+            ["list", "People", ListOrdered],
           ] as const
         ).map(([key, label, Icon]) => (
           <button
