@@ -21,10 +21,28 @@ const firaCode = Fira_Code({
   display: "swap",
 });
 
+const DESCRIPTION =
+  "Explore your research network from an ORCID iD: how it connects, evolves, and expands — everyone you have written with, where your work has been cited, and who you could connect with next.";
+
+// What a link to the site shows when it is shared (X, Facebook, LinkedIn, Slack...). The picture
+// is app/opengraph-image.png and app/twitter-image.png, a 1200x630 capture of the front page once
+// the network has grown. Those services need absolute URLs, hence metadataBase.
 export const metadata: Metadata = {
+  metadataBase: new URL("https://kenjifujita119.github.io"),
   title: "Research Constellation",
-  description:
-    "Explore your research network from an ORCID iD: how it connects, evolves, and expands — everyone you have written with, where your work has been cited, and who you could connect with next.",
+  description: DESCRIPTION,
+  openGraph: {
+    type: "website",
+    siteName: "Research Constellation",
+    title: "Research Constellation",
+    description: DESCRIPTION,
+    url: `${process.env.PAGES_BASE_PATH ?? ""}/`,
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Research Constellation",
+    description: DESCRIPTION,
+  },
 };
 
 // Cloudflare Web Analytics. Only the published build gets it: the Pages workflow passes the
