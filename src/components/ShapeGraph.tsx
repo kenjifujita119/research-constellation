@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type * as ThreeTypes from "three";
+import { COUNTRIES } from "@/lib/countries";
 import { buildShape, type Person, type Tie } from "@/lib/shape";
 import type { MyWork } from "@/lib/types";
 
@@ -21,12 +22,13 @@ import type { MyWork } from "@/lib/types";
 /** Two colourings were dropped as saying nothing: the year of the first paper together, and
  *  whether there was a paper in the last 3 years — the second contradicted the year slider as
  *  soon as it was moved back before that cut-off. */
-export type ShapeColor = "topic" | "cluster" | "role";
+export type ShapeColor = "topic" | "cluster" | "role" | "country";
 
 export const SHAPE_COLOR_LABELS: Record<ShapeColor, string> = {
   topic: "What you worked on together",
   cluster: "Who writes with whom",
   role: "Your role with them",
+  country: "Where they were",
 };
 
 /** What each colouring means, in one line. Shown under the chooser and in the legend, so the
@@ -37,6 +39,8 @@ export const SHAPE_COLOR_NOTES: Record<ShapeColor, string> = {
   cluster:
     "People who, on your papers, also wrote with each other share a colour. Striped: they write with people in more than one group. The colours only tell the groups apart.",
   role: "Where you were in the author list. Striped: it varies from paper to paper.",
+  country:
+    "The country on the latest paper you wrote together, which may not be where they are now. The largest countries get a colour; the rest, and anyone with no country given, are grey.",
 };
 
 /** What the colours mean, drawn in the corner of the shape. Built with the colours themselves,
@@ -134,6 +138,25 @@ const UNKNOWN = "rgb(140,140,140)";
 /** Number of topics that get a colour; the rest are grey. Same idea as the co-author view's
  *  palette: handing out more colours than can be told apart makes the distinction a lie. */
 const MAIN_TOPICS = 14;
+
+/** Colours for countries, most people first; the rest are grey, for the same reason as topics.
+ *  A fixed set rather than golden-angle hues: at the same saturation and lightness the golden
+ *  angle put Japan, Belgium and the Netherlands (2nd, 7th and 10th) in three greens that could
+ *  not be told apart (Measured, Kenji's 85 co-authors in 14 countries). These ten differ in
+ *  lightness as well as hue (Tableau 10, with its grey swapped out, since grey means "other").
+ *  Written as rgb(): the lines between spheres read their ends' colours in that form only. */
+const COUNTRY_COLORS = [
+  "rgb(78,121,167)",
+  "rgb(242,142,43)",
+  "rgb(225,87,89)",
+  "rgb(118,183,178)",
+  "rgb(89,161,79)",
+  "rgb(237,201,72)",
+  "rgb(176,122,161)",
+  "rgb(255,157,167)",
+  "rgb(156,117,95)",
+  "rgb(160,203,232)",
+];
 
 /** Maximum number of people whose spheres are painted in sections. With more, the stripes
  *  blur, and if everyone is striped the stripes distinguish nothing. */
@@ -375,8 +398,22 @@ export default function ShapeGraph({
       .slice(0, MAIN_TOPICS)
       .forEach(([t], i) => topicHue.set(t, (i * 137.508) % 360));
 
+    // Countries get hues the same way, most people first, so the country you share most
+    // co-authors with keeps the same colour from one visit to the next.
+    const perCountry = new Map<string, number>();
+    for (const p of shape.people) {
+      if (p.country) perCountry.set(p.country, (perCountry.get(p.country) ?? 0) + 1);
+    }
+    const countryColor = new Map<string, string>();
+    [...perCountry.entries()]
+      .sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1))
+      .slice(0, COUNTRY_COLORS.length)
+      .forEach(([c], i) => countryColor.set(c, COUNTRY_COLORS[i]));
+
     const paint = (p: Person): [number, number, number] => {
       switch (colorBy) {
+        case "country": // painted from countryColor below; this is only the grey
+          return hsl(0, 0, 0.42);
         case "topic": {
           // The representative colour is exactly the colour of "the topic you mainly worked on
           // together". Averaging hues produces a colour that belongs to no topic, and it can
@@ -407,7 +444,12 @@ export default function ShapeGraph({
       }
     };
 
-    const color = new Map(shape.people.map((p) => [p.id, css(paint(p))]));
+    const color = new Map(
+      shape.people.map((p) => [
+        p.id,
+        (colorBy === "country" && p.country && countryColor.get(p.country)) || css(paint(p)),
+      ]),
+    );
 
     // Breakdown for painting the sphere's surface in sections. Built only when colouring by
     // topic, and only for people spanning 2 or more topics.
@@ -522,6 +564,17 @@ export default function ShapeGraph({
           note: SHAPE_COLOR_NOTES.role,
         };
         break;
+      case "country": {
+        const items = [...countryColor.entries()].map(([code, color]) => ({
+          label: `${COUNTRIES[code]?.name ?? code} · ${perCountry.get(code)}`,
+          color,
+        }));
+        if (perCountry.size > countryColor.size || shape.people.some((p) => !p.country)) {
+          items.push({ label: "Other or not given", color: grey });
+        }
+        legend = { items, note: SHAPE_COLOR_NOTES.country };
+        break;
+      }
       default:
         legend = { note: SHAPE_COLOR_NOTES.cluster };
     }
@@ -628,6 +681,10 @@ export default function ShapeGraph({
               window.matchMedia("(hover: none)").matches
                 ? ""
                 : `<div style="font:12px system-ui;padding:6px 8px;background:rgba(0,0,0,.85);border-radius:4px;color:#fff;max-width:240px"><b>${n.name}</b><br><span style="opacity:.7">${n.papers} ${n.papers === 1 ? "paper" : "papers"} with you · ${n.since === n.until ? n.since : `${n.since}–${n.until}`}</span>${
+                  n.institution || n.country
+                    ? `<br><span style="opacity:.5">${[n.institution, n.country ? (COUNTRIES[n.country]?.name ?? n.country) : null].filter(Boolean).join(" · ")}, on your latest paper together</span>`
+                    : ""
+                }${
                   n.topics.length
                     ? `<br><span style="opacity:.7">${n.topics
                         .slice(0, 3)
