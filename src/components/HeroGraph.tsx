@@ -53,10 +53,15 @@ type HeroLink = { source: number; target: number; papers: number; since: number 
 type Instance = import("3d-force-graph").ForceGraph3DInstance<HeroNode, HeroLink>;
 
 /* The story, in milliseconds. */
-/** People arriving, year by year. Slow enough that each arrival's shove has time to settle
- *  before the next one lands — at half this, the wobbles ran into each other and the whole
- *  network just seethed */
-const GROW_MS = 16_000;
+/** People arrive this many years at a time. One year at a time was seventeen arrivals of 2 to
+ *  18 people over sixteen seconds, and it dragged; two at a time is nine arrivals of 5 to 27. Not
+ *  three: that lands 45 people at once, one shove far bigger than the rest. */
+const YEARS_PER_ARRIVAL = 2;
+/** How long the arrivals take: about a second between them, the same spacing as before. That
+ *  spacing is what lets each arrival's shove settle before the next one lands — at half of it,
+ *  the wobbles ran into each other and the whole network just seethed. So the growth is shorter
+ *  because there are fewer arrivals, not because they come faster. */
+const GROW_MS = 10_000;
 /** Drawing together while the camera comes in */
 const CLOSE_MS = 4_500;
 /** Opening out: letting go of the gathering, winding both layout controls down, and standing the
@@ -88,8 +93,10 @@ const CLOSEST = 0.5;
 /** The one distance the turn is framed from: where it opens, what it returns to after the close,
  *  and where it rests for the long look. One number for all three is what lets the loop come
  *  round without a jump — and it is also what makes the drawing-in visible, because a camera
- *  that stays put while the network contracts shows the contraction instead of following it. */
-const SURVEY = 1.55;
+ *  that stays put while the network contracts shows the contraction instead of following it.
+ *
+ *  1.55 left the resting shape a little too far off; 1.42 is about 8% nearer. */
+const SURVEY = 1.42;
 /** How far the 85th-percentile person sits from the middle once the whole sample has settled,
  *  measured over several runs: 209.7, 214.5, 212.6, 221.4 — call it 215.
  *
@@ -484,7 +491,11 @@ export default function HeroGraph({ className }: { className?: string }) {
             if (phase === 0) {
               // People arrive. Handing them to the layout re-heats it, so those already there
               // shift to make room — the network grows rather than filling in.
-              const year = Math.round(firstYear + (t / GROW_MS) * (lastYear - firstYear));
+              // The growth is cut into one slot per arrival plus the opening one, so the last
+              // arrival still gets its second to settle before the drawing-in starts.
+              const arrivals = Math.ceil((lastYear - firstYear) / YEARS_PER_ARRIVAL);
+              const slot = Math.min(arrivals, Math.floor((t / GROW_MS) * (arrivals + 1)));
+              const year = Math.min(lastYear, firstYear + slot * YEARS_PER_ARRIVAL);
               if (year !== shownYear) {
                 shownYear = year;
                 instance.graphData(upTo(shownYear));
