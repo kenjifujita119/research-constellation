@@ -180,6 +180,15 @@ const REACH_K = 0.55;
  * rather than assumed: the alpha decay and minimum, the velocity decay, and the re-heat.) */
 const QUICK_DECAY = 0.06;
 const SLOW_DECAY = 0.0055;
+/** How much of its speed each person loses per tick while the network is drawn in and let go
+ *  (d3's velocity decay; its own default of 0.4 is kept while people arrive).
+ *
+ *  The re-heat that the drawing-in needs puts the simulation back to full heat in a crowd, and
+ *  everyone overshot and swung back on every frame: measured in screen pixels, the frame-to-frame
+ *  roughness of each person's path jumped from 0.07 to 0.41 the moment the drawing-in began and
+ *  stayed near 0.3 while the camera came in, which is what read as the whole network shivering.
+ *  More friction takes the swing out without taking the gathering away. */
+const CALM_DECAY = 0.7;
 
 /** Groups get hues by the golden angle, in the order they were numbered (largest first) — the
  *  same rule as the Shape page, so the front door and the thing itself look like one product. */
@@ -411,6 +420,8 @@ export default function HeroGraph({ className }: { className?: string }) {
         // and it read as the network teleporting. From here on the layout gets no head start, so
         // the arrival plays out over frames you can actually watch.
         instance.warmupTicks(0);
+        // d3's own friction, read off the instance rather than assumed, to go back to each turn
+        const ARRIVING_DECAY = instance.d3VelocityDecay();
         const controls = instance.controls() as { autoRotate: boolean; enabled: boolean };
         controls.enabled = false; // it is a background, not something to fly around in
         controls.autoRotate = false; // the loop below moves the camera itself
@@ -461,8 +472,8 @@ export default function HeroGraph({ className }: { className?: string }) {
                 pull = 0;
                 reach = Infinity;
                 setSpace(0);
-                // Back to the quick cooling that the arrivals need
-                instance.d3AlphaDecay(QUICK_DECAY);
+                // Back to the quick cooling and d3's own friction that the arrivals need
+                instance.d3AlphaDecay(QUICK_DECAY).d3VelocityDecay(ARRIVING_DECAY);
                 // The turn starting over is a hard cut whatever happens — a hundred and thirty
                 // people drop back to a dozen — so this one is allowed to land settled. Only the
                 // arrivals within the year are meant to be felt, so the head start is handed back
@@ -478,7 +489,12 @@ export default function HeroGraph({ className }: { className?: string }) {
               // Everything from here to the long look asks the forces for something, and they
               // answer only in proportion to the heat left. One re-heat, then a cooling slow
               // enough to last the rest of the turn (see SLOW_DECAY above).
-              if (phase === 1) instance.d3AlphaDecay(SLOW_DECAY).d3ReheatSimulation();
+              if (phase === 1) {
+                instance
+                  .d3AlphaDecay(SLOW_DECAY)
+                  .d3VelocityDecay(CALM_DECAY)
+                  .d3ReheatSimulation();
+              }
               if (phase === 3) {
                 // Let the heat go quickly again and let the engine rest. Nothing moves but the
                 // camera from here, and a live simulation is what the frame rate actually goes on
