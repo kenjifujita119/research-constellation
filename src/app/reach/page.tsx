@@ -112,9 +112,12 @@ function ReachView({ orcid, onReload }: { orcid: string; onReload: () => void })
     const start = first ? Math.max(Math.min(...years), first) : Math.min(...years);
     return [start, Math.max(start, ...years)] as const;
   }, [reach, data]);
-  const from = range?.[0] ?? span[0];
   const to = range?.[1] ?? span[1];
-  const upTo = year ?? to;
+  // The timeline starts where the filter does, the same rule as on the Shape page. Counting
+  // "from 2020" with the slider at 2016 is a window that runs backwards: it showed
+  // "cited 2020–2016 · 0 countries" over an empty globe (Measured).
+  const from = Math.min(Math.max(range?.[0] ?? span[0], since), to);
+  const upTo = Math.min(Math.max(year ?? to, from), to);
   /** The years being counted, in words: "by 2026", or "2020–2026" once `since` is set. */
   const when = !since ? `by ${upTo}` : since === upTo ? `in ${upTo}` : `${since}–${upTo}`;
 
@@ -125,7 +128,7 @@ function ReachView({ orcid, onReload }: { orcid: string; onReload: () => void })
     timer.current = setInterval(
       () =>
         setYear((y) => {
-          const next = (y ?? Math.max(from, since)) + 1;
+          const next = Math.max(y ?? from, from) + 1;
           if (next >= to) {
             setPlaying(false);
             return to;
@@ -137,7 +140,7 @@ function ReachView({ orcid, onReload }: { orcid: string; onReload: () => void })
     return () => {
       if (timer.current) clearInterval(timer.current);
     };
-  }, [playing, from, to, seconds, since]);
+  }, [playing, from, to, seconds]);
 
   /** A colour per field. Handing them out by golden angle is the same rule as on the Shape screen.
    *  Bigger fields get lower numbers, so their colours stay stable. */
@@ -417,15 +420,16 @@ function ReachView({ orcid, onReload }: { orcid: string; onReload: () => void })
             </Label>
             <Slider
               min={span[0]}
-              max={span[1]}
+              max={to}
               step={1}
               value={[since || span[0]]}
               onValueChange={([v]) => setSince(v <= span[0] ? 0 : v)}
             />
             <p className="text-[10px] leading-relaxed text-muted-foreground">
               Count only papers that cited you from this year on, to see who is still reading
-              you. The globe, the list and the country breakdowns all follow it. The colours and
-              the area shares in the list still describe all years.
+              you. The globe, the list and the country breakdowns all follow it, and the
+              timeline and playback start from this year. The colours and the area shares in
+              the list still describe all years.
             </p>
             {since > 0 && (
               <Button
@@ -692,8 +696,7 @@ function ReachView({ orcid, onReload }: { orcid: string; onReload: () => void })
           size="icon"
           className="size-8 shrink-0"
           onClick={() => {
-            // With a filter set, the years before it would play as an empty globe.
-            if (!playing && upTo >= to) setYear(Math.min(Math.max(from, since), to));
+            if (!playing && upTo >= to) setYear(from);
             setPlaying((p) => !p);
           }}
           aria-label={playing ? "Pause" : "Play the years"}

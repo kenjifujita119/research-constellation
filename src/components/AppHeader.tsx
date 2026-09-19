@@ -129,7 +129,7 @@ export default function AppHeader({
         onClick={onOpenFilters}
       >
         <SlidersHorizontal className="size-3.5" />
-        Filters
+        <span className="hidden sm:inline">Filters</span>
       </Button>
 
       <div className="hidden items-center gap-0.5 lg:flex">
@@ -174,8 +174,13 @@ export default function AppHeader({
           startBuild(meta.orcid, { hops: meta.hops, refresh: true }).then(onRebuild);
         }}
       />
-      <BuildInfo meta={meta} />
-      <ThemeToggle />
+      {/* Not on phones. With them the header needed about 480px: the theme switch was cut off
+          at the right edge and the name was squeezed down to nothing (Measured at 375px). On a
+          phone the theme follows the system setting. */}
+      <div className="hidden items-center gap-2 sm:flex">
+        <BuildInfo meta={meta} />
+        <ThemeToggle />
+      </div>
     </header>
   );
 }

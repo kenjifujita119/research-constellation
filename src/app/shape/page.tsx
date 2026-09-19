@@ -105,31 +105,6 @@ function ShapeView({ orcid, onReload }: { orcid: string; onReload: () => void })
     return ys.length ? ([Math.min(...ys), Math.max(...ys)] as const) : ([2000, 2026] as const);
   }, [data]);
 
-  const from = range?.[0] ?? span[0];
-  const to = range?.[1] ?? span[1];
-  const upTo = year ?? to;
-
-  // "Your career in N seconds": play back the shape as it grows.
-  // The interval per year is the chosen number of seconds divided by the number of years.
-  useEffect(() => {
-    if (!playing) return;
-    const steps = Math.max(to - from, 1);
-    const every = Math.max(120, (seconds * 1000) / steps);
-    timer.current = setInterval(() => {
-      setYear((y) => {
-        const next = (y ?? from) + 1;
-        if (next > to) {
-          setPlaying(false);
-          return to;
-        }
-        return next;
-      });
-    }, every);
-    return () => {
-      if (timer.current) clearInterval(timer.current);
-    };
-  }, [playing, from, to, seconds]);
-
   // People for the list. Built from the same rules as the shape (lib/shape.ts is the single
   // source).
   const people = useMemo(() => (data ? buildShape(data.works).people : []), [data]);
@@ -157,6 +132,36 @@ function ShapeView({ orcid, onReload }: { orcid: string; onReload: () => void })
     [filter, readable],
   );
   const closeness = active.minPapers;
+
+  const to = range?.[1] ?? span[1];
+  // The timeline starts where the filter does. "Latest paper together in or after 2021" is a
+  // statement about 2021 on, so before 2021 it can only show an empty or half-empty stage next
+  // to a paper count that ignores it (Measured: with the filter at 2021 and the timeline at
+  // 2015, "2 publications · 0 collaborators" over a blank canvas). The Reach page follows the
+  // same rule with its own filter.
+  const from = Math.min(Math.max(range?.[0] ?? span[0], active.activeSince), to);
+  const upTo = Math.min(Math.max(year ?? to, from), to);
+
+  // "Your career in N seconds": play back the shape as it grows.
+  // The interval per year is the chosen number of seconds divided by the number of years.
+  useEffect(() => {
+    if (!playing) return;
+    const steps = Math.max(to - from, 1);
+    const every = Math.max(120, (seconds * 1000) / steps);
+    timer.current = setInterval(() => {
+      setYear((y) => {
+        const next = Math.max(y ?? from, from) + 1;
+        if (next > to) {
+          setPlaying(false);
+          return to;
+        }
+        return next;
+      });
+    }, every);
+    return () => {
+      if (timer.current) clearInterval(timer.current);
+    };
+  }, [playing, from, to, seconds]);
 
   /** People to draw. The list is built from the same set — with the rule in two places,
    *  someone could be in the list but missing from the picture. */

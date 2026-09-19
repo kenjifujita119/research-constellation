@@ -116,6 +116,9 @@ export default function PeopleFilters({
                 value={[filter.activeSince || first]}
                 onValueChange={([v]) => patch({ activeSince: v <= first ? 0 : v })}
               />
+              <p className="text-[10px] leading-relaxed text-muted-foreground">
+                The timeline and playback then start from this year.
+              </p>
             </div>
           )}
 
