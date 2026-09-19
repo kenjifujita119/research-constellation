@@ -99,7 +99,7 @@ export type RawAuthor = {
 
 type Page<T> = {
   results?: T[] | null;
-  meta?: { next_cursor?: string | null; cost_usd?: number | null } | null;
+  meta?: { next_cursor?: string | null; cost_usd?: number | null; count?: number | null } | null;
 };
 
 /* ---------- Kinds of failure ---------- */
@@ -317,19 +317,29 @@ export class OpenAlexClient {
 
   /* ---------------------------------------------------------- authors */
 
-  /** Searches for authors by name. Returns only records that have an ORCID.
+  /** Searches for authors by name. Returns only records that have an ORCID, one per person,
+   *  and whether OpenAlex had more records than one page could bring back.
    *
-   *  $0.001 per call (the search price). The keyless free allowance is $0.10/day, so do
-   *  not call this on every keystroke; the start page calls it once, after typing stops. */
-  async searchAuthors(query: string, limit = 8, signal?: AbortSignal): Promise<RawAuthor[]> {
+   *  $0.001 per call (the search price), whatever the page size, so a page of 50 costs no more
+   *  than a page of 16. The keyless free allowance is $0.10/day, so do not call this on every
+   *  keystroke; the start page calls it once, after typing stops.
+   *
+   *  Everyone found is returned. This used to keep the 8 with the most works, and a researcher
+   *  with 23 works was the 9th of 10 people named Noriko Sato — found by OpenAlex, then dropped
+   *  before the page could show her. */
+  async searchAuthors(
+    query: string,
+    signal?: AbortSignal,
+  ): Promise<{ authors: RawAuthor[]; more: boolean }> {
     const q = query.trim();
-    if (q.length < 2) return [];
+    if (q.length < 2) return { authors: [], more: false };
+    const perPage = 50;
     const data = await this.get<Page<RawAuthor>>(
       "/authors",
       {
         search: q,
         filter: "has_orcid:true",
-        per_page: Math.max(limit * 2, 10),
+        per_page: perPage,
         select: AUTHOR_SELECT,
       },
       signal,
@@ -346,10 +356,10 @@ export class OpenAlexClient {
       cited.set(key, (cited.get(key) ?? 0) + (a.cited_by_count || 0));
       if ((a.works_count || 0) > (best.get(key)?.works_count || -1)) best.set(key, a);
     }
-    return [...best]
+    const authors = [...best]
       .map(([key, a]) => ({ ...a, works_count: works.get(key), cited_by_count: cited.get(key) }))
-      .sort((a, b) => (b.works_count || 0) - (a.works_count || 0))
-      .slice(0, limit);
+      .sort((a, b) => (b.works_count || 0) - (a.works_count || 0));
+    return { authors, more: (data.meta?.count ?? 0) > perPage };
   }
 
   /** Returns every author record with this ORCID, most works first.

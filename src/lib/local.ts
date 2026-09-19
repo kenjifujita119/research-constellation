@@ -441,9 +441,10 @@ export async function saveWorksExclusions(
 export async function searchAuthors(
   q: string,
   signal?: AbortSignal,
-): Promise<{ results: AuthorHit[] }> {
-  const rows = await new OpenAlexClient().searchAuthors(q, 8, signal);
+): Promise<{ results: AuthorHit[]; more: boolean }> {
+  const { authors: rows, more } = await new OpenAlexClient().searchAuthors(q, signal);
   return {
+    more,
     results: rows.map((a) => {
       const years = (a.counts_by_year ?? []).map((c) => c.year);
       const inst = a.last_known_institutions?.[0];

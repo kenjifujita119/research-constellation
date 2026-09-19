@@ -47,7 +47,9 @@ export default function Home() {
   const [query, setQuery] = useState("");
   // Also keep which query the results answer. Without it, candidates for the previous name
   // linger while typing, and people end up choosing from someone else's list.
-  const [hits, setHits] = useState<{ q: string; results: AuthorHit[] } | null>(null);
+  const [hits, setHits] = useState<{ q: string; results: AuthorHit[]; more: boolean } | null>(
+    null,
+  );
   const [searching, setSearching] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const abort = useRef<AbortController | null>(null);
@@ -60,6 +62,7 @@ export default function Home() {
   // Show only the results for the name being typed now. Leftovers from the previous name are
   // treated as absent.
   const shown = looking && hits?.q === term ? hits.results : null;
+  const more = looking && hits?.q === term && hits.more;
 
   useEffect(() => {
     if (!looking) return;
@@ -71,7 +74,7 @@ export default function Home() {
       setError(null);
       searchAuthors(term, ctrl.signal)
         .then((res) => {
-          setHits({ q: term, results: res.results });
+          setHits({ q: term, results: res.results, more: res.more });
           setSearching(false);
         })
         .catch((err) => {
@@ -181,7 +184,17 @@ export default function Home() {
                         : "Nobody with an ORCID iD came back for that. Try the name as it appears on your papers, or paste your ORCID iD."}
                     </p>
                   ) : (
-                    <ul className="divide-y overflow-hidden rounded-md border bg-card/80 backdrop-blur-sm">
+                    <>
+                    {/* How many there are, so a long list reads as "everyone found" rather than a
+                        top few — and, when OpenAlex had more than one page, what to do then. */}
+                    <p className="mb-1.5 text-[11px] leading-relaxed text-muted-foreground">
+                      {more
+                        ? `The first ${shown!.length} people OpenAlex found for this name, most works first. More share it. Not here? Paste your ORCID iD.`
+                        : `${shown!.length} ${shown!.length === 1 ? "person" : "people"} with an ORCID iD found. Not here? Paste your ORCID iD.`}
+                    </p>
+                    {/* Everyone found, in a box that scrolls: a name like Noriko Sato brings back
+                        ten people, and a long list must not push the rest of the page away. */}
+                    <ul className="max-h-80 divide-y overflow-y-auto overscroll-contain rounded-md border bg-card/80 backdrop-blur-sm">
                       {(shown ?? []).map((a) => (
                         <li key={a.orcid}>
                           <button
@@ -218,6 +231,7 @@ export default function Home() {
                         </li>
                       ))}
                     </ul>
+                    </>
                   )}
                 </div>
               )}
