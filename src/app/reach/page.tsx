@@ -9,6 +9,8 @@ import {
   Loader2,
   Pause,
   Play,
+  Settings2,
+  SlidersHorizontal,
   X,
 } from "lucide-react";
 import Link from "next/link";
@@ -26,6 +28,8 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+import { Label } from "@/components/ui/label";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Slider } from "@/components/ui/slider";
 import { COUNTRIES } from "@/lib/countries";
 import { publicationsNote } from "@/lib/counting";
@@ -78,11 +82,19 @@ function ReachView({ orcid, onReload }: { orcid: string; onReload: () => void })
   const [detailFailed, setDetailFailed] = useState(false);
   // A refresh is running. Reload when it finishes.
   const [refreshing, setRefreshing] = useState(false);
-  // On narrow screens the globe and the list do not fit side by side. The list is the default:
-  // screen readers cannot read the globe, so the one you can read as text comes first.
-  const [narrowView, setNarrowView] = useState<"list" | "globe">("list");
+  // On narrow screens the globe and the list do not fit side by side. Screen readers cannot read
+  // the globe, so the same content is also offered as a list; the globe is the default, as on
+  // the Shape page, because it is what the page is for.
+  const [narrowView, setNarrowView] = useState<"list" | "globe">("globe");
   const [year, setYear] = useState<number | null>(null);
   const [playing, setPlaying] = useState(false);
+  // Playback settings, as on the Shape page. range is [start, end]; seconds is how long the
+  // whole playback takes.
+  const [range, setRange] = useState<[number, number] | null>(null);
+  const [seconds, setSeconds] = useState(20);
+  // Count only citations from this year on (0 = from the start). The Shape page's "latest paper
+  // together in or after" asks who you still write with; this asks who is still reading you.
+  const [since, setSince] = useState(0);
   // The user decides whether it spins. What you are trying to read cannot be read if it keeps
   // moving on its own.
   const [spin, setSpin] = useState(true);
@@ -100,28 +112,32 @@ function ReachView({ orcid, onReload }: { orcid: string; onReload: () => void })
     const start = first ? Math.max(Math.min(...years), first) : Math.min(...years);
     return [start, Math.max(start, ...years)] as const;
   }, [reach, data]);
-  const upTo = year ?? span[1];
+  const from = range?.[0] ?? span[0];
+  const to = range?.[1] ?? span[1];
+  const upTo = year ?? to;
+  /** The years being counted, in words: "by 2026", or "2020–2026" once `since` is set. */
+  const when = !since ? `by ${upTo}` : since === upTo ? `in ${upTo}` : `${since}–${upTo}`;
 
-  // The whole span plays in 20 seconds, the same length as playback on the Shape screen.
+  // Plays the chosen years in the chosen number of seconds, the same as on the Shape page.
   useEffect(() => {
     if (!playing) return;
-    const steps = Math.max(span[1] - span[0], 1);
+    const steps = Math.max(to - from, 1);
     timer.current = setInterval(
       () =>
         setYear((y) => {
-          const next = (y ?? span[0]) + 1;
-          if (next >= span[1]) {
+          const next = (y ?? Math.max(from, since)) + 1;
+          if (next >= to) {
             setPlaying(false);
-            return span[1];
+            return to;
           }
           return next;
         }),
-      Math.max(120, 20000 / steps),
+      Math.max(120, (seconds * 1000) / steps),
     );
     return () => {
       if (timer.current) clearInterval(timer.current);
     };
-  }, [playing, span]);
+  }, [playing, from, to, seconds, since]);
 
   /** A colour per field. Handing them out by golden angle is the same rule as on the Shape screen.
    *  Bigger fields get lower numbers, so their colours stay stable. */
@@ -215,7 +231,7 @@ function ReachView({ orcid, onReload }: { orcid: string; onReload: () => void })
     const rows: { code: string; name: string; n: number; field: string | null; rank: number }[] =
       [];
     for (const [code, years] of Object.entries(reach)) {
-      const n = years.reduce((acc, [y, c]) => (y <= upTo ? acc + c : acc), 0);
+      const n = years.reduce((acc, [y, c]) => (y <= upTo && (!since || y >= since) ? acc + c : acc), 0);
       if (!n) continue;
       rows.push({
         code,
@@ -232,7 +248,7 @@ function ReachView({ orcid, onReload }: { orcid: string; onReload: () => void })
       r.rank = i > 0 && rows[i - 1].n === r.n ? rows[i - 1].rank : i + 1;
     });
     return rows;
-  }, [reach, upTo, topField]);
+  }, [reach, upTo, since, topField]);
 
   /** Countries reached by that year, and the number of papers citing you. Keeps the figures in
    *  the top left in step with the year.
@@ -244,17 +260,17 @@ function ReachView({ orcid, onReload }: { orcid: string; onReload: () => void })
     let countries = 0;
     let offMap = 0;
     for (const [code, rows] of Object.entries(reach)) {
-      const n = rows.reduce((acc, [y, c]) => (y <= upTo ? acc + c : acc), 0);
+      const n = rows.reduce((acc, [y, c]) => (y <= upTo && (!since || y >= since) ? acc + c : acc), 0);
       if (!n) continue;
       countries += 1;
       if (!COUNTRIES[code]) offMap += 1;
     }
     const papers = (data?.meta.citing_by_year ?? []).reduce(
-      (acc, [y, c]) => (y <= upTo ? acc + c : acc),
+      (acc, [y, c]) => (y <= upTo && (!since || y >= since) ? acc + c : acc),
       0,
     );
     return { countries, papers, offMap };
-  }, [reach, upTo, data]);
+  }, [reach, upTo, since, data]);
 
   /** Open or close a country. Clear the previous country's breakdown before fetching. */
   const openCountry = (code: string | null) => {
@@ -267,7 +283,7 @@ function ReachView({ orcid, onReload }: { orcid: string; onReload: () => void })
   useEffect(() => {
     if (!opened) return;
     let cancelled = false;
-    fetchCountryReach(orcid, opened, upTo)
+    fetchCountryReach(orcid, opened, upTo, since || undefined)
       .then((d) => {
         if (!cancelled) setDetail(d);
       })
@@ -277,7 +293,7 @@ function ReachView({ orcid, onReload }: { orcid: string; onReload: () => void })
     return () => {
       cancelled = true;
     };
-  }, [orcid, opened, upTo]);
+  }, [orcid, opened, upTo, since]);
 
   // Whether it is loading is derived rather than kept as another piece of state. Calling
   // setState inside an effect sets off a chain of renders.
@@ -380,6 +396,50 @@ function ReachView({ orcid, onReload }: { orcid: string; onReload: () => void })
             startWorksBuild(orcid, true).then(() => setRefreshing(true));
           }}
         />
+        {/* The counterpart of the Shape page's filters: its "latest paper together in or after"
+            asks who you still write with, this asks who is still reading you. */}
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button variant="outline" size="sm" className="h-7 gap-1.5 px-2 text-xs">
+              <SlidersHorizontal className="size-3.5" />
+              <span className="hidden sm:inline">Filters</span>
+              {since > 0 && (
+                <span className="tabular rounded-sm bg-primary/15 px-1 text-[10px] font-semibold text-primary">
+                  1
+                </span>
+              )}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent align="end" className="w-80 space-y-2 p-3">
+            <Label className="flex justify-between text-[11px] text-muted-foreground">
+              Cited in or after
+              <span className="tabular font-medium text-foreground">{since || "any year"}</span>
+            </Label>
+            <Slider
+              min={span[0]}
+              max={span[1]}
+              step={1}
+              value={[since || span[0]]}
+              onValueChange={([v]) => setSince(v <= span[0] ? 0 : v)}
+            />
+            <p className="text-[10px] leading-relaxed text-muted-foreground">
+              Count only papers that cited you from this year on, to see who is still reading
+              you. The globe, the list and the country breakdowns all follow it. The colours and
+              the area shares in the list still describe all years.
+            </p>
+            {since > 0 && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 w-full text-xs text-muted-foreground"
+                onClick={() => setSince(0)}
+              >
+                <X className="size-3" />
+                Clear filter
+              </Button>
+            )}
+          </PopoverContent>
+        </Popover>
         <Button asChild variant="outline" size="sm" className="h-7 gap-1.5 px-2 text-xs">
           <Link href={shapeHref(orcid)} aria-label="Shape">
             <Boxes className="size-3.5" />
@@ -468,6 +528,7 @@ function ReachView({ orcid, onReload }: { orcid: string; onReload: () => void })
           reach={reach}
           mixOf={mixOf}
           upTo={upTo}
+          since={since}
           spin={spin && !picked && !opened}
           selected={opened}
           onPick={setPicked}
@@ -476,6 +537,7 @@ function ReachView({ orcid, onReload }: { orcid: string; onReload: () => void })
 
         <div className="pointer-events-none absolute left-3 top-3 rounded-sm bg-black/55 px-3 py-2 text-[11px] leading-relaxed text-white/80 backdrop-blur-sm">
           <p className="tabular text-2xl font-semibold leading-none text-white">{upTo}</p>
+          {since > 0 && <p className="tabular mt-1 text-white/55">cited {when}</p>}
           <p className="mt-1.5">
             {sofar.countries} {sofar.countries === 1 ? "country" : "countries"} ·{" "}
             {sofar.papers.toLocaleString()} citing publications
@@ -490,7 +552,7 @@ function ReachView({ orcid, onReload }: { orcid: string; onReload: () => void })
             <p className="font-semibold text-white">{picked.name}</p>
             <p className="mt-1 text-white/65">
               {picked.count.toLocaleString()} citing{" "}
-              {picked.count === 1 ? "publication" : "publications"} by {upTo}
+              {picked.count === 1 ? "publication" : "publications"} {when}
             </p>
           </div>
         ) : (
@@ -519,7 +581,7 @@ function ReachView({ orcid, onReload }: { orcid: string; onReload: () => void })
             code={opened}
             name={COUNTRIES[opened]?.name ?? opened}
             colour={barOf(opened)}
-            upTo={upTo}
+            when={when}
             detail={detail}
             loading={loadingDetail}
             onClose={() => openCountry(null)}
@@ -534,8 +596,8 @@ function ReachView({ orcid, onReload }: { orcid: string; onReload: () => void })
             text={
               <>
                 <p>
-                  The number is how many papers from that country cited you by {upTo}. It
-                  follows the year slider.
+                  The number is how many papers from that country cited you {when}. It
+                  follows the year slider, and the filter when one is set.
                 </p>
                 <p>
                   The colour band and the line under the name describe all years: the
@@ -545,7 +607,7 @@ function ReachView({ orcid, onReload }: { orcid: string; onReload: () => void })
               </>
             }
           >
-            papers, by {upTo}
+            papers, {when}
           </Explain>
         </div>
         <ol className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
@@ -589,7 +651,7 @@ function ReachView({ orcid, onReload }: { orcid: string; onReload: () => void })
           ))}
           {ranked.length === 0 && (
             <li className="px-3 py-3 text-[11px] text-muted-foreground">
-              Nobody had cited you yet by {upTo}.
+              {since ? `Nobody cited you ${when}.` : `Nobody had cited you yet by ${upTo}.`}
             </li>
           )}
         </ol>
@@ -602,8 +664,8 @@ function ReachView({ orcid, onReload }: { orcid: string; onReload: () => void })
       <nav className="flex shrink-0 border-t bg-card md:hidden">
         {(
           [
-            ["list", "Countries", ListOrdered],
             ["globe", "Globe", Globe],
+            ["list", "Countries", ListOrdered],
           ] as const
         ).map(([key, label, Icon]) => (
           <button
@@ -630,17 +692,18 @@ function ReachView({ orcid, onReload }: { orcid: string; onReload: () => void })
           size="icon"
           className="size-8 shrink-0"
           onClick={() => {
-            if (!playing && upTo >= span[1]) setYear(span[0]);
+            // With a filter set, the years before it would play as an empty globe.
+            if (!playing && upTo >= to) setYear(Math.min(Math.max(from, since), to));
             setPlaying((p) => !p);
           }}
           aria-label={playing ? "Pause" : "Play the years"}
         >
           {playing ? <Pause className="size-4" /> : <Play className="size-4" />}
         </Button>
-        <span className="tabular w-10 shrink-0 text-xs text-muted-foreground">{span[0]}</span>
+        <span className="tabular w-10 shrink-0 text-xs text-muted-foreground">{from}</span>
         <Slider
-          min={span[0]}
-          max={span[1]}
+          min={from}
+          max={to}
           step={1}
           value={[upTo]}
           onValueChange={([v]) => {
@@ -650,8 +713,51 @@ function ReachView({ orcid, onReload }: { orcid: string; onReload: () => void })
           className="flex-1"
         />
         <span className="tabular w-10 shrink-0 text-right text-xs text-muted-foreground">
-          {span[1]}
+          {to}
         </span>
+
+        {/* The same two playback settings as on the Shape page. */}
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button variant="outline" size="icon" className="size-8 shrink-0" aria-label="Playback settings">
+              <Settings2 className="size-4" />
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent align="end" className="w-72 space-y-4">
+            <div className="space-y-1.5">
+              <Label className="flex justify-between text-[11px] text-muted-foreground">
+                Years to play
+                <span className="tabular font-medium text-foreground">
+                  {from}–{to}
+                </span>
+              </Label>
+              <Slider
+                min={span[0]}
+                max={span[1]}
+                step={1}
+                value={[from, to]}
+                onValueChange={([a, b]) => {
+                  setRange([a, b]);
+                  setPlaying(false);
+                  setYear(Math.min(Math.max(upTo, a), b));
+                }}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="flex justify-between text-[11px] text-muted-foreground">
+                Time to play it
+                <span className="tabular font-medium text-foreground">{seconds}s</span>
+              </Label>
+              <Slider
+                min={5}
+                max={90}
+                step={5}
+                value={[seconds]}
+                onValueChange={([v]) => setSeconds(v)}
+              />
+            </div>
+          </PopoverContent>
+        </Popover>
       </div>
     </div>
   );
@@ -664,7 +770,7 @@ function ReachView({ orcid, onReload }: { orcid: string; onReload: () => void })
 function CountryDetail({
   name,
   colour,
-  upTo,
+  when,
   detail,
   loading,
   onClose,
@@ -672,7 +778,8 @@ function CountryDetail({
   code: string;
   name: string;
   colour: string;
-  upTo: number;
+  /** The years counted, in words: "by 2026" or "2020–2026" */
+  when: string;
   detail: CountryReach | null;
   loading: boolean;
   onClose: () => void;
@@ -690,7 +797,7 @@ function CountryDetail({
         <div className="min-w-0 flex-1">
           <h2 className="truncate text-[13px] font-semibold leading-tight">{name}</h2>
           <p className="tabular text-[10px] text-muted-foreground">
-            {detail ? `${detail.n_citing} citing publications by ${upTo}` : `by ${upTo}`}
+            {detail ? `${detail.n_citing} citing publications ${when}` : when}
           </p>
         </div>
         <Button
@@ -714,7 +821,7 @@ function CountryDetail({
 
         {detail && detail.n_citing === 0 && (
           <p className="py-2 text-[11px] text-muted-foreground">
-            Nobody from here had cited you by {upTo}.
+            Nobody from here cited you {when}.
           </p>
         )}
 

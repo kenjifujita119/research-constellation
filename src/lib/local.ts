@@ -294,10 +294,11 @@ export async function fetchCountryReach(
   orcid: string,
   code: string,
   until?: number,
+  since?: number,
 ): Promise<CountryReach> {
   const [papers, reach] = await Promise.all([loadPapers(orcid), loadReach(orcid)]);
   if (!papers || !reach) throw new ApiError(404, "This reach has not been built yet");
-  return countryReach(papers.value, reach.value, code, until);
+  return countryReach(papers.value, reach.value, code, until, undefined, since);
 }
 
 /** The co-author network, with when it was built attached (the page's "3 days ago"). */

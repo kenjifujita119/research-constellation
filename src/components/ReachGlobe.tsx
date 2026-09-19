@@ -41,6 +41,7 @@ export default function ReachGlobe({
   reach,
   mixOf,
   upTo,
+  since = 0,
   spin,
   selected,
   onPick,
@@ -57,6 +58,9 @@ export default function ReachGlobe({
   mixOf: (code: string) => Slice[];
   /** Light up only what had arrived by this year */
   upTo: number;
+  /** Count only citations from this year on (0 = from the start). Passed as a value rather than
+   *  filtered out of `reach`, because a new `reach` rebuilds the whole globe. */
+  since?: number;
   spin: boolean;
   /** The country whose breakdown is open. Make it visible on the globe as well */
   selected: string | null;
@@ -67,9 +71,9 @@ export default function ReachGlobe({
   const holder = useRef<HTMLDivElement>(null);
   const [failure, setFailure] = useState<string | null>(null);
   const [labels, setLabels] = useState<Label[]>([]);
-  const latest = useRef({ upTo, spin, onPick, onOpen, selected });
+  const latest = useRef({ upTo, since, spin, onPick, onOpen, selected });
   useEffect(() => {
-    latest.current = { upTo, spin, onPick, onOpen, selected };
+    latest.current = { upTo, since, spin, onPick, onOpen, selected };
   });
 
   const landings = useMemo<Landing[]>(() => {
@@ -229,7 +233,7 @@ export default function ReachGlobe({
           ray.setFromCamera(pointer, camera);
           const hit = ray.intersectObjects(dots.map((d) => d.mesh))[0];
           const found = hit && dots.find((d) => d.mesh === hit.object);
-          const shown = found && countUpTo(found.landing, latest.current.upTo);
+          const shown = found && countIn(found.landing, latest.current.upTo, latest.current.since);
           renderer.domElement.style.cursor = found ? "pointer" : "grab";
           latest.current.onPick(
             found && shown
@@ -256,7 +260,7 @@ export default function ReachGlobe({
           ray.setFromCamera(pointer, camera);
           const hit = ray.intersectObjects(dots.map((d) => d.mesh))[0];
           const found = hit && dots.find((d) => d.mesh === hit.object);
-          if (found && countUpTo(found.landing, latest.current.upTo)) {
+          if (found && countIn(found.landing, latest.current.upTo, latest.current.since)) {
             latest.current.onOpen(found.landing.code);
           }
         };
@@ -266,10 +270,11 @@ export default function ReachGlobe({
         // --- Drawing --------------------------------------------------
         const colour = new THREE.Color();
         let shownYear = -1;
+        let shownSince = -1;
         let shownChoice: string | null = null;
         const paint = (year: number) => {
           for (const { mesh, landing, size } of dots) {
-            const n = countUpTo(landing, year);
+            const n = countIn(landing, year, latest.current.since);
             const material = mesh.material as ThreeTypes.SpriteMaterial;
             if (!n) {
               mesh.visible = false;
@@ -302,7 +307,7 @@ export default function ReachGlobe({
         const updateLabels = () => {
           const year = latest.current.upTo;
           const out: Label[] = [];
-          const named = landings.filter((l) => countUpTo(l, year) > 0).slice(0, LABELS);
+          const named = landings.filter((l) => countIn(l, year, latest.current.since) > 0).slice(0, LABELS);
           const placed: { x: number; y: number }[] = [];
           for (const l of named) {
             const [x, y, z] = onGlobe(l.place.lat, l.place.lon, RADIUS + 3);
@@ -332,9 +337,14 @@ export default function ReachGlobe({
           frame = requestAnimationFrame(tick);
           const { upTo: year, spin: spinning } = latest.current;
           controls.autoRotate = spinning;
-          if (year !== shownYear || latest.current.selected !== shownChoice) {
+          if (
+            year !== shownYear ||
+            latest.current.since !== shownSince ||
+            latest.current.selected !== shownChoice
+          ) {
             paint(year);
             shownYear = year;
+            shownSince = latest.current.since;
             shownChoice = latest.current.selected;
           }
           controls.update();
@@ -418,10 +428,14 @@ export default function ReachGlobe({
   );
 }
 
-/** Number of citations from that country up to that year. */
-function countUpTo(landing: { byYear: Map<number, number> }, year: number): number {
+/** Number of citations from that country from `since` (0 = the start) up to that year. */
+function countIn(
+  landing: { byYear: Map<number, number> },
+  year: number,
+  since: number,
+): number {
   let n = 0;
-  for (const [y, c] of landing.byYear) if (y <= year) n += c;
+  for (const [y, c] of landing.byYear) if (y <= year && y >= since) n += c;
   return n;
 }
 

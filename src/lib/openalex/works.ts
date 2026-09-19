@@ -538,9 +538,13 @@ export function countryReach(
   code: string,
   until?: number,
   limit = 60,
+  since?: number,
 ): CountryReach {
   const here = reach.citing.filter(
-    (w) => w.countries.includes(code) && (until === undefined || (w.year || 0) <= until),
+    (w) =>
+      w.countries.includes(code) &&
+      (until === undefined || (w.year || 0) <= until) &&
+      (!since || (w.year || 0) >= since),
   );
   const mine = new Map(papers.works.map((w) => [w.id, w]));
 
