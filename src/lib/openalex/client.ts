@@ -22,6 +22,9 @@ export const OR_BATCH = 50;
 /** Maximum number of groups group_by returns (an OpenAlex limit). For very prolific
  *  authors, co-authors are cut off at the top 200 by number of shared papers. */
 export const GROUP_LIMIT = 200;
+/** How deep `page=` paging reaches (an OpenAlex limit). Beyond it OpenAlex wants a cursor, and
+ *  cursor paging past the first page needs an API key (401 without one, since late 2026). */
+export const PAGE_LIMIT = 10_000;
 
 export const AUTHOR_SELECT = [
   "id",
@@ -315,6 +318,28 @@ export class OpenAlexClient {
     });
   }
 
+  /** Walks a list query page by page, fetching each page only when the caller asks for it, so
+   *  breaking out of the loop sends nothing more.
+   *
+   *  Uses `page=`, not `cursor=`. OpenAlex now answers 401 to cursor paging past the first page
+   *  without an API key, and the browser has none, so every list longer than one page failed
+   *  (Reach and collaborator search went down with "OpenAlex answered 401 for /works").
+   *  `page=` reaches the first PAGE_LIMIT results. The default order is stable between pages
+   *  (checked: 1,200 works over 6 pages, no repeats). */
+  private async *pages<T>(
+    path: string,
+    params: Record<string, string | number>,
+    perPage: number,
+  ): AsyncGenerator<Page<T>> {
+    for (let page = 1; ; page++) {
+      const data = await this.get<Page<T>>(path, { ...params, per_page: perPage, page });
+      yield data;
+      const got = data.results?.length ?? 0;
+      const count = data.meta?.count ?? 0;
+      if (got < perPage || page * perPage >= Math.min(count, PAGE_LIMIT)) return;
+    }
+  }
+
   /* ---------------------------------------------------------- authors */
 
   /** Searches for authors by name. Returns only records that have an ORCID, one per person,
@@ -460,16 +485,17 @@ export class OpenAlexClient {
     const found = await this.each(chunks, async (chunk) => {
       const want = new Set(chunk);
       const ties = new Map<string, Tie>();
-      let cursor: string | null | undefined = "*";
-      while (cursor) {
-        // Giving the same field twice makes an AND: works whose authors include both
-        // this person and someone in this batch
-        const data: Page<RawWork> = await this.get("/works", {
+      // Giving the same field twice makes an AND: works whose authors include both
+      // this person and someone in this batch
+      const pages = this.pages<RawWork>(
+        "/works",
+        {
           filter: `authorships.author.id:${me},authorships.author.id:${chunk.join("|")}`,
-          per_page: 200,
-          cursor,
           select: "id,publication_year,authorships",
-        });
+        },
+        200,
+      );
+      for await (const data of pages) {
         for (const w of data.results ?? []) {
           const here = new Set<string>();
           for (const a of w.authorships ?? []) {
@@ -478,7 +504,6 @@ export class OpenAlexClient {
           }
           for (const id of here) add(ties, id, 1, w.publication_year ?? null);
         }
-        cursor = data.meta?.next_cursor;
       }
       return ties;
     });
@@ -502,16 +527,14 @@ export class OpenAlexClient {
    *  the OpenAlex side. 200 per request. */
   async workIds(authorIds: string[], maxWorks = 2000): Promise<Set<string>> {
     const ids = new Set<string>();
-    let cursor: string | null | undefined = "*";
-    while (cursor && ids.size < maxWorks) {
-      const data: Page<{ id: string }> = await this.get("/works", {
-        filter: `authorships.author.id:${authorIds.map(shortId).join("|")}`,
-        per_page: 200,
-        cursor,
-        select: "id",
-      });
+    const pages = this.pages<{ id: string }>(
+      "/works",
+      { filter: `authorships.author.id:${authorIds.map(shortId).join("|")}`, select: "id" },
+      200,
+    );
+    for await (const data of pages) {
       for (const w of data.results ?? []) ids.add(shortId(w.id));
-      cursor = data.meta?.next_cursor;
+      if (ids.size >= maxWorks) break;
     }
     return ids;
   }
@@ -522,9 +545,13 @@ export class OpenAlexClient {
    *  holding 216 MB of raw data for a researcher with 508 papers (17,637 citations) only
    *  to throw 98% of it away. A browser tab cannot cope with that.
    *
-   *  Within a batch, pages follow a cursor, so they run one after another; batches run in
-   *  parallel. The cap applies to the total across all batches: a cap per batch would let
-   *  the total overshoot once for every batch.
+   *  Within a batch, pages run one after another; batches run in parallel. The cap applies to
+   *  the total across all batches: a cap per batch would let the total overshoot once for
+   *  every batch.
+   *
+   *  Paging reaches only PAGE_LIMIT works per query, so a batch cited more often than that is
+   *  split in half and read again (one wasted page each time). A single paper cited more than
+   *  PAGE_LIMIT times is still read only that far.
    *
    *  Returns (rows kept, raw works seen). The second tells whether the cap was hit. */
   async worksCiting<R>(
@@ -544,19 +571,18 @@ export class OpenAlexClient {
 
     const batch = async (chunk: string[]): Promise<R[]> => {
       const rows: R[] = [];
-      let cursor: string | null | undefined = "*";
-      while (cursor) {
-        if (taken >= maxWorks) break;
-        const data: Page<RawWork> = await this.get("/works", {
-          filter: "cites:" + chunk.join("|"),
-          per_page: 100,
-          cursor,
-          select,
-        });
+      if (taken >= maxWorks) return rows;
+      const pages = this.pages<RawWork>("/works", { filter: "cites:" + chunk.join("|"), select }, 100);
+      for await (const data of pages) {
+        if ((data.meta?.count ?? 0) > PAGE_LIMIT && chunk.length > 1) {
+          const half = Math.ceil(chunk.length / 2);
+          const first = await batch(chunk.slice(0, half));
+          return first.concat(await batch(chunk.slice(half)));
+        }
         const page = data.results ?? [];
         for (const row of keep(page)) rows.push(row);
         taken += page.length;
-        cursor = data.meta?.next_cursor;
+        if (taken >= maxWorks) break;
       }
       return rows;
     };
@@ -586,20 +612,21 @@ export class OpenAlexClient {
     if (opts.sinceYear) filters.push(`from_publication_date:${opts.sinceYear}-01-01`);
 
     const results: RawWork[] = [];
-    let cursor: string | null | undefined = "*";
-    while (cursor && results.length < maxWorks) {
-      const data: Page<RawWork> = await this.get("/works", {
+    const pages = this.pages<RawWork>(
+      "/works",
+      {
         filter: filters.join(","),
-        per_page: 200,
-        cursor,
         // fwci = citation impact normalised by field and year (1.0 is the field average)
         select:
           "id,doi,title,publication_year,cited_by_count,authorships,primary_topic,type,fwci," +
           "citation_normalized_percentile,is_retracted" +
           (opts.withReferences ? ",referenced_works" : ""),
-      });
+      },
+      200,
+    );
+    for await (const data of pages) {
       for (const w of data.results ?? []) results.push(w);
-      cursor = data.meta?.next_cursor;
+      if (results.length >= maxWorks) break;
     }
     return results.slice(0, maxWorks);
   }
